@@ -1,0 +1,101 @@
+---
+title: "r_demo"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Example: Download university's publication, count time to process
+
+
+
+```{r packages, include=TRUE}
+library(rscopus)
+library(dplyr)
+library(ggplot2)
+library(tidyr)
+
+# rscopus::set_api_key(api_key = "your API key")
+# rscopus::inst_token_header(token = "your Insttoken (optional)")
+```
+
+
+```{r ch1, include=TRUE}
+start <- Sys.time()
+
+res <- abstract_retrieval(id = "2-s2.0-85028517439", identifier = "eid")
+
+end <- Sys.time()
+print(end - start)
+```
+
+## Example: download a publication by a large collaboration. Study contributors
+
+```{r ch2, include=TRUE}
+start <- Sys.time()
+res1 <- abstract_retrieval(id = "2-s2.0-85038109506", identifier = "eid")
+end <- Sys.time()
+print(end - start)
+print(paste("Article:", res1$content$`abstracts-retrieval-response`$coredata$`dc:title`))
+print(paste("Citations:", res1$content$`abstracts-retrieval-response`$coredata$`citedby-count`))
+print(paste("Number of authors:", res1$content$`abstracts-retrieval-response`$affiliation %>% length()))
+
+```
+
+## Contributing institutions
+Extract & rearrange affiliation data
+```{r ch3, include=T}
+ 
+aff_list <- res1$content$`abstracts-retrieval-response`$affiliation 
+
+# filling missing values
+for (a in 1:length(aff_list)){
+  aff_list[[a]]$`affiliation-city`           <- ifelse(is.null(aff_list[[a]]$`affiliation-city`), "unknown city", aff_list[[a]]$`affiliation-city`)
+  aff_list[[a]]$affilname                    <- ifelse(is.null(aff_list[[a]]$affilname), "unknown affiliation", aff_list[[a]]$affilname)
+  aff_list[[a]]$`affiliation-country`        <- ifelse(is.null(aff_list[[a]]$`affiliation-country`), "unknown country", aff_list[[a]]$`affiliation-country`)
+}
+
+# converting list to table
+aff_table <- aff_list %>%    unlist(use.names = T) %>% 
+  tibble(value = ., variable = names(.)) %>% 
+  mutate(variable = gsub("-", "_", x = variable)) %>% 
+  mutate(idvar = rep(1:(nrow(.)/3), each = 3)) %>% 
+  spread(variable, value)
+
+head(aff_table)
+```
+Count countries of institutions indicated as main affiliation
+```{r ch3, include=T}
+ 
+table(aff_table$affiliation_country)
+```
+
+Plot country counts
+
+```{r ch4, include=T}
+ 
+p <- table(aff_table$affiliation_country) %>% 
+  as.data.frame() %>% 
+  rename(country = Var1, authors = Freq) %>% 
+  mutate(country = as.character(country)) %>% 
+  mutate(country = if_else(authors >= 4, country, "other")) %>% 
+  group_by(country) %>% 
+  summarise(authors = sum(authors)) %>% 
+  ungroup() %>% 
+  arrange(-authors) %>% 
+  mutate(country = factor(country, levels = country)) %>% 
+  ggplot(aes(y = authors, x = country, color = country, fill = country)) +
+    geom_bar(alpha = 0.6, stat = "identity", position = "dodge") +
+    theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1),
+          legend.position = "none")
+  plot(p)
+
+```
+
+```{r ch5, include=T}
+
+
+```
+
